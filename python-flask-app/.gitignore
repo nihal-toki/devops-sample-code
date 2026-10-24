@@ -1,0 +1,7 @@
+.venv/
+venv/
+.jenkins-venv/
+__pycache__/
+*.pyc
+python-app-deploy/
+.DS_Store
