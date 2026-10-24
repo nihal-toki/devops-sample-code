@@ -2,6 +2,11 @@
 pipeline {
     agent any
 
+    options {
+        disableConcurrentBuilds()
+        timeout(time: 10, unit: 'MINUTES')
+    }
+
     environment {
         VENV = "${WORKSPACE}/.jenkins-venv"
         DEPLOY_DIR = "${WORKSPACE}/python-app-deploy"
@@ -15,6 +20,7 @@ pipeline {
                     sh '''
                         python3 -m venv "$VENV"
                         "$VENV/bin/python" -m pip install -r requirements.txt
+                        "$VENV/bin/python" -m pip check
                     '''
                 }
             }
@@ -46,10 +52,9 @@ pipeline {
         stage('Run Application') {
             steps {
                 dir('python-flask-app') {
-                    echo 'Checking deployed Flask application...'
+                    echo 'Starting deployed Flask HTTP server...'
                     sh '''
-                        cd "$DEPLOY_DIR"
-                        "$VENV/bin/python" -c "from app import app; print(app.url_map)"
+                        "$VENV/bin/python" pipeline_runtime.py start --deployed "$DEPLOY_DIR/app.py"
                     '''
                 }
             }
@@ -58,10 +63,9 @@ pipeline {
         stage('Test Application') {
             steps {
                 dir('python-flask-app') {
-                    echo 'Verifying deployed Flask application...'
+                    echo 'Testing deployed application over HTTP...'
                     sh '''
-                        cd "$DEPLOY_DIR"
-                        "$VENV/bin/python" -c "from app import app; r = app.test_client().get('/'); assert r.status_code == 200; assert r.get_data(as_text=True) == 'Hello, Jenkins Multi-Stage Pipeline!'; print(r.get_data(as_text=True))"
+                        "$VENV/bin/python" pipeline_runtime.py verify --deployed "$DEPLOY_DIR/app.py" --source "$WORKSPACE/python-flask-app/app.py"
                     '''
                 }
             }
@@ -78,6 +82,12 @@ pipeline {
         }
 
         always {
+            sh '''
+                if [ -x "$VENV/bin/python" ]; then
+                    "$VENV/bin/python" "$WORKSPACE/python-flask-app/pipeline_runtime.py" stop --deployed "$DEPLOY_DIR/app.py"
+                fi
+            '''
+            archiveArtifacts artifacts: 'python-app-deploy/http-response.json,python-app-deploy/server-cleanup.json,python-app-deploy/app.log', allowEmptyArchive: true
             echo 'Pipeline execution finished.'
         }
     }
