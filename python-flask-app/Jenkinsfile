@@ -10,50 +10,60 @@ pipeline {
     stages {
         stage('Build') {
             steps {
-                echo 'Creating virtual environment and installing dependencies...'
-                sh '''
-                    python3 -m venv "$VENV"
-                    "$VENV/bin/python" -m pip install -r requirements.txt
-                '''
+                dir('python-flask-app') {
+                    echo 'Creating virtual environment and installing dependencies...'
+                    sh '''
+                        python3 -m venv "$VENV"
+                        "$VENV/bin/python" -m pip install -r requirements.txt
+                    '''
+                }
             }
         }
 
         stage('Test') {
             steps {
-                echo 'Running unit tests...'
-                sh '''
-                    "$VENV/bin/python" -m unittest discover -s .
-                '''
+                dir('python-flask-app') {
+                    echo 'Running unit tests...'
+                    sh '''
+                        "$VENV/bin/python" -m unittest discover -s . -p "test_*.py"
+                    '''
+                }
             }
         }
 
         stage('Deploy') {
             steps {
-                echo 'Deploying application...'
-                sh '''
-                    mkdir -p "$DEPLOY_DIR"
-                    cp app.py "$DEPLOY_DIR/"
-                '''
+                dir('python-flask-app') {
+                    echo 'Deploying application...'
+                    sh '''
+                        mkdir -p "$DEPLOY_DIR"
+                        cp app.py "$DEPLOY_DIR/"
+                    '''
+                }
             }
         }
 
         stage('Run Application') {
             steps {
-                echo 'Starting Flask application...'
-                sh '''
-                    cd "$DEPLOY_DIR"
-                    "$VENV/bin/python" -c "from app import app; print(app.url_map)"
-                '''
+                dir('python-flask-app') {
+                    echo 'Checking deployed Flask application...'
+                    sh '''
+                        cd "$DEPLOY_DIR"
+                        "$VENV/bin/python" -c "from app import app; print(app.url_map)"
+                    '''
+                }
             }
         }
 
         stage('Test Application') {
             steps {
-                echo 'Verifying deployed Flask application...'
-                sh '''
-                    cd "$DEPLOY_DIR"
-                    "$VENV/bin/python" -c "from app import app; r = app.test_client().get('/'); assert r.status_code == 200; assert r.get_data(as_text=True) == 'Hello, Jenkins Multi-Stage Pipeline!'; print(r.get_data(as_text=True))"
-                '''
+                dir('python-flask-app') {
+                    echo 'Verifying deployed Flask application...'
+                    sh '''
+                        cd "$DEPLOY_DIR"
+                        "$VENV/bin/python" -c "from app import app; r = app.test_client().get('/'); assert r.status_code == 200; assert r.get_data(as_text=True) == 'Hello, Jenkins Multi-Stage Pipeline!'; print(r.get_data(as_text=True))"
+                    '''
+                }
             }
         }
     }
@@ -62,8 +72,13 @@ pipeline {
         success {
             echo 'Pipeline completed successfully!'
         }
+
         failure {
-            echo 'Pipeline failed. Check the logs for more details.'
+            echo 'Pipeline failed. Check the console output for details.'
+        }
+
+        always {
+            echo 'Pipeline execution finished.'
         }
     }
 }
